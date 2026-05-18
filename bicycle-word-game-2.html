@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bailey Rider — CS Word Game</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+
+  :root {
+    --sky: #87CEEB;
+    --road: #555;
+    --road-line: #FFD700;
+    --grass: #5aad5a;
+    --correct: #00e676;
+    --wrong: #ff1744;
+    --ui-bg: #003399;
+    --ui-text: #fff;
+    --panel: rgba(0,20,80,0.82);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--sky);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+  }
+
+
+
+  canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,35,0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    gap: 16px;
+  }
+
+  #overlay h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: clamp(2rem, 6vw, 4rem);
+    color: #FFD700;
+    text-shadow: 0 2px 12px rgba(255,215,0,0.6);
+  }
+
+  #overlay p {
+    color: #aad4ff;
+    font-size: 1.1rem;
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.5;
+  }
+
+  #start-btn, #restart-btn {
+    background: #FFD700;
+    color: #003399;
+    border: none;
+    padding: 14px 40px;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.4rem;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(255,215,0,0.5);
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+
+  #start-btn:hover, #restart-btn:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 24px rgba(255,215,0,0.7);
+  }
+
+  #final-score {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2rem;
+    color: #00e676;
+  }
+
+  #instructions {
+    font-size: 0.9rem;
+    color: #88aacc;
+    text-align: center;
+  }
+
+  #controls-hint {
+    position: fixed;
+    bottom: 10px;
+    right: 14px;
+    color: rgba(255,255,255,0.5);
+    font-size: 0.75rem;
+    z-index: 50;
+    text-align: right;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+
+
+<canvas id="game-canvas"></canvas>
+
+<div id="overlay">
+  <h1>🚲 Bailey Rider</h1>
+  <p>Steer your bike left and right to ride through the <strong>correct answer</strong>. Avoid the wrong ones!</p>
+  <p id="instructions">← → Arrow keys or A/D to steer<br>Mobile: tap left/right side of screen</p>
+  <button id="start-btn">Start Riding!</button>
+</div>
+
+<div id="controls-hint">← → keys / tap sides</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// QUESTION BANK
+// ═══════════════════════════════════════════════
+const QUESTIONS = [
+  { q: "What does CPU stand for?", a: "Central Processing Unit", w: ["Control Panel Unit","Computer Program Unit","Core Power Unit"] },
+  { q: "Which language uses indentation for blocks?", a: "Python", w: ["Java","C++","HTML"] },
+  { q: "What does HTML stand for?", a: "HyperText Markup Language", w: ["High Transfer Markup Loop","Hyper Task Memory Level","Home Text Markup Logic"] },
+  { q: "A loop that runs while a condition is true?", a: "while loop", w: ["for loop","if loop","do loop"] },
+  { q: "Which is NOT a data type in Python?", a: "decimal", w: ["integer","string","boolean"] },
+  { q: "What symbol starts a comment in Python?", a: "#", w: ["//","/*","--"] },
+  { q: "What does RAM stand for?", a: "Random Access Memory", w: ["Read All Memory","Remote Access Module","Run All Machines"] },
+  { q: "Which protocol is used for websites?", a: "HTTP", w: ["FTP","SMTP","SSH"] },
+  { q: "What is binary?", a: "Base 2 number system", w: ["Base 10 system","Base 16 system","Base 8 system"] },
+  { q: "Which converts text to binary?", a: "ASCII", w: ["URL","DNS","HTML"] },
+  { q: "A step-by-step set of instructions?", a: "Algorithm", w: ["Variable","Function","Loop"] },
+  { q: "What does 'def' do in Python?", a: "Defines a function", w: ["Defines a variable","Starts a loop","Imports a module"] },
+  { q: "Which stores true or false?", a: "Boolean", w: ["Integer","String","Float"] },
+  { q: "What does DNS stand for?", a: "Domain Name System", w: ["Digital Node Service","Data Network Signal","Direct Name Server"] },
+  { q: "Which is an input device?", a: "Keyboard", w: ["Monitor","Speaker","Printer"] },
+  { q: "What is a pixel?", a: "Smallest unit of a screen image", w: ["A type of font","A memory unit","A network packet"] },
+  { q: "Which stores data permanently?", a: "Hard Drive", w: ["RAM","Cache","Register"] },
+  { q: "What does 'if' do in programming?", a: "Makes a decision", w: ["Stores a value","Creates a loop","Defines a function"] },
+  { q: "Which network topology is shaped like a ring?", a: "Ring", w: ["Star","Bus","Mesh"] },
+  { q: "What is phishing?", a: "Tricking users into giving personal data", w: ["A fishing game","Encrypting files","Blocking websites"] },
+];
+
+// ═══════════════════════════════════════════════
+// CANVAS SETUP
+// ═══════════════════════════════════════════════
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const startBtn = document.getElementById('start-btn');
+
+let W, H, ROAD_Y, ROAD_H, LANE_COUNT, LANE_W;
+
+const UI_H = 120; // height of the top question bar drawn on canvas
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+  ROAD_H = Math.min(160, H * 0.28);
+  ROAD_Y = H - ROAD_H - 20;
+  LANE_COUNT = 3;
+  LANE_W = W / LANE_COUNT;
+}
+resize();
+window.addEventListener('resize', () => { resize(); if (gameState === 'playing') setupWordSlots(); });
+
+// ═══════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════
+let gameState = 'idle'; // idle | playing | dead | gameover
+let score = 0, streak = 0, lives = 3;
+let currentQ = null, answerWords = [];
+let wordSlots = []; // {x, lane, label, isCorrect, hit, hitTimer}
+let bike = { x: 0, lane: 1, visualX: 0, tilt: 0 };
+let bgOffset = 0, roadOffset = 0;
+let spawnTimer = 0, spawnInterval = 180;
+let feedbacks = []; // {x, y, text, color, life}
+let clouds = [];
+let trees = [];
+let frameCount = 0;
+let keys = { left: false, right: false };
+let laneChangeCooldown = 0;
+let currentLane = 1;
+let animId;
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+function initGame() {
+  score = 0; streak = 0; lives = 3;
+  wordSlots = []; feedbacks = []; frameCount = 0;
+  spawnTimer = 0; spawnInterval = 160; bgOffset = 0; roadOffset = 0;
+  currentLane = 1;
+  bike.lane = 1;
+  bike.x = W / 2;
+  bike.visualX = W / 2;
+  bike.tilt = 0;
+  laneChangeCooldown = 0;
+  clouds = Array.from({length: 5}, () => ({
+    x: Math.random() * W,
+    y: 20 + Math.random() * (ROAD_Y * 0.5),
+    w: 80 + Math.random() * 100,
+    speed: 0.3 + Math.random() * 0.4
+  }));
+  trees = Array.from({length: 8}, (_, i) => ({
+    x: i * (W / 4) + Math.random() * (W / 4),
+    y: ROAD_Y - 10,
+    h: 40 + Math.random() * 30,
+    side: Math.random() > 0.5 ? 1 : -1
+  }));
+  pickQuestion();
+}
+
+function pickQuestion() {
+  const idx = Math.floor(Math.random() * QUESTIONS.length);
+  currentQ = QUESTIONS[idx];
+  const wrong = [...currentQ.w].sort(() => Math.random() - 0.5).slice(0, 2);
+  answerWords = shuffle([currentQ.a, ...wrong]);
+}
+
+function setupWordSlots() {
+  // Place 3 words across the 3 lanes
+  wordSlots = answerWords.map((word, i) => ({
+    x: (i + 0.5) * LANE_W,
+    lane: i,
+    label: word,
+    isCorrect: word === currentQ.a,
+    hit: false,
+    hitTimer: 0,
+    y: -(ROAD_Y - UI_H - 20)
+  }));
+}
+
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+// ═══════════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+});
+
+// Mobile tap
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const tx = e.touches[0].clientX;
+  if (tx < W / 2) keys.left = true; else keys.right = true;
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  keys.left = false; keys.right = false;
+}, { passive: false });
+
+startBtn.addEventListener('click', startGame);
+
+// Draw something on canvas immediately so it's not a blank blue screen behind the overlay
+function drawTitleScreen() {
+  resize();
+  // Sky
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#4fa8d8');
+  sky.addColorStop(1, '#b8e0f7');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+  // Sun
+  ctx.save();
+  ctx.shadowBlur = 30; ctx.shadowColor = '#FFE680';
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath(); ctx.arc(W * 0.85, 60, 36, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Grass
+  ctx.fillStyle = '#5aad5a';
+  const roadY = H - Math.min(160, H * 0.28) - 20;
+  ctx.fillRect(0, roadY - 8, W, 20);
+  // Road
+  ctx.fillStyle = '#666';
+  ctx.fillRect(0, roadY, W, Math.min(160, H * 0.28) + 20);
+  ctx.fillStyle = '#FFD700';
+  ctx.fillRect(0, roadY, W, 4);
+}
+drawTitleScreen();
+
+function startGame() {
+  overlay.style.display = 'none';
+  gameState = 'playing';
+  initGame();
+  if (animId) cancelAnimationFrame(animId);
+  loop();
+}
+
+// ═══════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════
+function loop() {
+  if (gameState !== 'playing') return;
+  update();
+  draw();
+  animId = requestAnimationFrame(loop);
+}
+
+function update() {
+  frameCount++;
+  bgOffset += 1.5;
+  roadOffset = (roadOffset + 3) % 80;
+
+  // Clouds
+  clouds.forEach(c => { c.x -= c.speed; if (c.x < -c.w) c.x = W + c.w; });
+
+  // Bike lane movement
+  if (laneChangeCooldown > 0) laneChangeCooldown--;
+
+  const targetX = (currentLane + 0.5) * LANE_W;
+
+  if (keys.left && laneChangeCooldown === 0 && currentLane > 0) {
+    currentLane--;
+    laneChangeCooldown = 18;
+    bike.tilt = -0.35;
+  }
+  if (keys.right && laneChangeCooldown === 0 && currentLane < 2) {
+    currentLane++;
+    laneChangeCooldown = 18;
+    bike.tilt = 0.35;
+  }
+
+  // Smooth bike X
+  const newTarget = (currentLane + 0.5) * LANE_W;
+  bike.visualX += (newTarget - bike.visualX) * 0.14;
+  bike.tilt *= 0.88;
+
+  // Spawn word sets
+  spawnTimer++;
+  if (spawnTimer >= spawnInterval && wordSlots.length === 0) {
+    spawnTimer = 0;
+    spawnInterval = Math.max(80, spawnInterval - 2);
+    setupWordSlots();
+  }
+
+  // Move word slots down road
+  const speed = 1.8 + score * 0.02;
+  wordSlots.forEach(ws => {
+    if (!ws.hit) ws.y += speed;
+    else ws.hitTimer++;
+  });
+
+  // Collision — bike is at bottom of road
+  const bikeY = ROAD_Y + ROAD_H * 0.5;
+  const bikeR = 22;
+
+  wordSlots.forEach(ws => {
+    if (ws.hit) return;
+    const wY = ROAD_Y + ws.y;
+    const wX = (ws.lane + 0.5) * LANE_W;
+    const dx = Math.abs(bike.visualX - wX);
+    const dy = Math.abs(bikeY - wY);
+    if (dx < LANE_W * 0.42 && dy < 38) {
+      ws.hit = true;
+      if (ws.isCorrect) {
+        score += 10 + streak * 2;
+        streak++;
+        feedbacks.push({ x: ws.x, y: ROAD_Y + ws.y - 20, text: `+${10 + (streak-1)*2} ✓`, color: '#00e676', life: 60 });
+        if (streak % 3 === 0) feedbacks.push({ x: W/2, y: H*0.3, text: `🔥 x${streak} Streak!`, color: '#FFD700', life: 80 });
+        pickQuestion();
+        wordSlots = [];
+        spawnTimer = 0;
+      } else {
+        lives--;
+        streak = 0;
+        feedbacks.push({ x: ws.x, y: ROAD_Y + ws.y - 20, text: `WRONG! -1 ❤️`, color: '#ff1744', life: 70 });
+        // shake
+        shakeScreen();
+        if (lives <= 0) {
+          gameState = 'gameover';
+          showGameOver();
+          return;
+        }
+        // Remove this wrong word, give another chance
+        wordSlots = wordSlots.filter(w => !w.hit);
+      }
+    }
+  });
+
+  // Remove offscreen words
+  wordSlots = wordSlots.filter(ws => {
+    const wY = ROAD_Y + ws.y;
+    if (ws.hitTimer > 30) return false;
+    if (!ws.hit && wY > H + 80) return false;
+    return true;
+  });
+
+  // Feedbacks
+  feedbacks.forEach(f => { f.y -= 1.2; f.life--; });
+  feedbacks = feedbacks.filter(f => f.life > 0);
+}
+
+let shakeAmt = 0;
+function shakeScreen() { shakeAmt = 10; }
+
+// ═══════════════════════════════════════════════
+// DRAW
+// ═══════════════════════════════════════════════
+function draw() {
+  ctx.save();
+  if (shakeAmt > 0) {
+    ctx.translate(Math.random()*shakeAmt - shakeAmt/2, Math.random()*shakeAmt - shakeAmt/2);
+    shakeAmt *= 0.7;
+  }
+
+  // Sky gradient
+  const sky = ctx.createLinearGradient(0, 0, 0, ROAD_Y);
+  sky.addColorStop(0, '#4fa8d8');
+  sky.addColorStop(1, '#b8e0f7');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, ROAD_Y);
+
+  // Sun
+  ctx.save();
+  ctx.shadowBlur = 30; ctx.shadowColor = '#FFE680';
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath(); ctx.arc(W * 0.85, 40, 28, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // Clouds
+  clouds.forEach(c => drawCloud(c.x, c.y, c.w));
+
+  // Grass
+  ctx.fillStyle = '#5aad5a';
+  ctx.fillRect(0, ROAD_Y - 8, W, 20);
+
+  // Road
+  ctx.fillStyle = '#666';
+  ctx.fillRect(0, ROAD_Y, W, ROAD_H + 20);
+
+  // Road dashed lines
+  ctx.strokeStyle = '#FFD700';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([30, 20]);
+  ctx.lineDashOffset = -roadOffset;
+  for (let lane = 1; lane < LANE_COUNT; lane++) {
+    ctx.beginPath();
+    ctx.moveTo(lane * LANE_W, ROAD_Y);
+    ctx.lineTo(lane * LANE_W, ROAD_Y + ROAD_H + 20);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Road edges
+  ctx.fillStyle = '#FFD700';
+  ctx.fillRect(0, ROAD_Y, W, 4);
+  ctx.fillRect(0, ROAD_Y + ROAD_H + 16, W, 4);
+
+  // Word obstacles
+  wordSlots.forEach(ws => {
+    const wX = (ws.lane + 0.5) * LANE_W;
+    const wY = ROAD_Y + ws.y;
+    if (ws.hit) {
+      ctx.globalAlpha = Math.max(0, 1 - ws.hitTimer / 25);
+    }
+    drawWordChunk(wX, wY, ws.label, ws.isCorrect, ws.hit);
+    ctx.globalAlpha = 1;
+  });
+
+  // Trees (scenery)
+  trees.forEach(t => drawTree(t.x, t.y, t.h));
+
+  // Bike
+  drawBike(bike.visualX, ROAD_Y + ROAD_H * 0.5, bike.tilt);
+
+  // Feedbacks
+  feedbacks.forEach(f => {
+    const alpha = Math.min(1, f.life / 20);
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 1.1rem Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = f.color;
+    ctx.shadowBlur = 8; ctx.shadowColor = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  });
+
+  // Lane indicator dots
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc((i + 0.5) * LANE_W, ROAD_Y - 18, i === currentLane ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = i === currentLane ? '#FFD700' : 'rgba(255,255,255,0.3)';
+    ctx.fill();
+  }
+
+  // Draw top UI bar ON canvas (always on top)
+  drawUI();
+
+  ctx.restore();
+}
+
+function drawCloud(x, y, w) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.shadowBlur = 10; ctx.shadowColor = 'rgba(255,255,255,0.5)';
+  const h = w * 0.4;
+  ctx.beginPath();
+  ctx.ellipse(x, y, w * 0.5, h * 0.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(x - w * 0.25, y + h * 0.1, w * 0.3, h * 0.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + w * 0.25, y + h * 0.1, w * 0.28, h * 0.38, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawTree(x, y, h) {
+  ctx.save();
+  ctx.fillStyle = '#3d7a3d';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.lineTo(x - h * 0.4, y);
+  ctx.lineTo(x + h * 0.4, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#8B5E3C';
+  ctx.fillRect(x - 5, y, 10, 15);
+  ctx.restore();
+}
+
+function drawWordChunk(x, y, text, isCorrect, hit) {
+  ctx.save();
+  const pad = 14;
+  ctx.font = 'bold 1rem Nunito, sans-serif';
+  ctx.textAlign = 'center';
+  const tw = ctx.measureText(text).width;
+  const bw = Math.max(tw + pad * 2, 80);
+  const bh = 38;
+
+  // Shadow
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = hit ? (isCorrect ? '#00e676' : '#ff1744') : 'rgba(0,0,0,0.4)';
+
+  // Box
+  const bg = hit
+    ? (isCorrect ? '#00e676' : '#ff4444')
+    : (isCorrect ? '#003399' : '#444466');
+  ctx.fillStyle = bg;
+  roundRect(ctx, x - bw/2, y - bh/2, bw, bh, 10);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = hit ? '#fff' : (isCorrect ? '#4488ff' : '#8888aa');
+  ctx.lineWidth = 2;
+  roundRect(ctx, x - bw/2, y - bh/2, bw, bh, 10);
+  ctx.stroke();
+
+  // Text
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff';
+  ctx.fillText(text, x, y + 6);
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawBike(x, y, tilt) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(tilt);
+
+  const sc = 1.1;
+  ctx.scale(sc, sc);
+
+  // Wheels
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 3;
+  ctx.fillStyle = '#333';
+
+  // Back wheel
+  ctx.beginPath(); ctx.arc(-18, 10, 16, 0, Math.PI * 2); ctx.stroke();
+  // Spokes back
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + frameCount * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(-18, 10);
+    ctx.lineTo(-18 + Math.cos(a) * 14, 10 + Math.sin(a) * 14);
+    ctx.stroke();
+  }
+
+  // Front wheel
+  ctx.beginPath(); ctx.arc(18, 10, 16, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + frameCount * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(18, 10);
+    ctx.lineTo(18 + Math.cos(a) * 14, 10 + Math.sin(a) * 14);
+    ctx.stroke();
+  }
+
+  // Frame
+  ctx.strokeStyle = '#003399';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(-18, 10); // back axle
+  ctx.lineTo(0, -12);  // seat tube top
+  ctx.lineTo(18, 10);  // front axle
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(-18, 10);
+  ctx.stroke();
+
+  // Seat post
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(-4, -24);
+  ctx.stroke();
+  // Seat
+  ctx.fillStyle = '#003399';
+  ctx.beginPath();
+  ctx.ellipse(-4, -26, 10, 4, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Handlebar
+  ctx.strokeStyle = '#003399';
+  ctx.beginPath();
+  ctx.moveTo(18, 10);
+  ctx.lineTo(14, -18);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(10, -18);
+  ctx.lineTo(20, -16);
+  ctx.stroke();
+
+  // Rider body
+  // Body (torso)
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.ellipse(-1, -32, 9, 13, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#cc9900';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Head
+  ctx.fillStyle = '#FFDAB9';
+  ctx.beginPath();
+  ctx.arc(-2, -46, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#cc8866';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Red hair (drawn after head so it layers over the back/sides)
+  ctx.fillStyle = '#cc2200';
+  // Main hair mass on top and sides
+  ctx.beginPath();
+  ctx.arc(-2, -46, 9.5, Math.PI * 1.1, Math.PI * 1.95, false);
+  ctx.fill();
+  // Flicky bits at the back
+  ctx.beginPath();
+  ctx.moveTo(-10, -46);
+  ctx.quadraticCurveTo(-18, -40, -14, -33);
+  ctx.quadraticCurveTo(-10, -38, -9, -46);
+  ctx.fill();
+  // Side strand
+  ctx.beginPath();
+  ctx.moveTo(-8, -38);
+  ctx.quadraticCurveTo(-14, -32, -11, -28);
+  ctx.quadraticCurveTo(-7, -32, -6, -38);
+  ctx.fill();
+
+  // Helmet
+  ctx.fillStyle = '#003399';
+  ctx.beginPath();
+  ctx.arc(-2, -46, 9.5, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = '#4466cc';
+  ctx.fillRect(-11, -48, 18, 5);
+
+  // Arms
+  ctx.strokeStyle = '#FFD700';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(2, -36);
+  ctx.quadraticCurveTo(10, -28, 15, -18);
+  ctx.stroke();
+
+  // Legs
+  const legAngle = Math.sin(frameCount * 0.18) * 0.5;
+  ctx.strokeStyle = '#003399';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, -22);
+  ctx.lineTo(-8 + Math.cos(legAngle) * 8, 0 + Math.sin(legAngle) * 6);
+  ctx.lineTo(-18, 10);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -22);
+  ctx.lineTo(-8 - Math.cos(legAngle) * 8, 0 - Math.sin(legAngle) * 6);
+  ctx.lineTo(-18, 10);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawUI() {
+  // Background bar
+  ctx.save();
+  ctx.fillStyle = '#003399';
+  ctx.fillRect(0, 0, W, UI_H);
+  // Bottom shadow line
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, UI_H, W, 4);
+
+  // Question text
+  const qText = currentQ ? currentQ.q : 'Loading…';
+  ctx.font = 'bold ' + Math.min(42, W * 0.06) + 'px Fredoka One, cursive';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFD700';
+  ctx.shadowBlur = 4; ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  wrapText(ctx, qText, W / 2, 38, W - 40, Math.min(42, W * 0.06) + 10);
+  ctx.shadowBlur = 0;
+
+  // Score / Streak / Lives row
+  ctx.font = 'bold 15px Nunito, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#aad4ff';
+  ctx.fillText('Score:', 20, UI_H - 10);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(score, 70, UI_H - 10);
+
+  ctx.fillStyle = '#aad4ff';
+  ctx.fillText('Streak:', W/2 - 50, UI_H - 10);
+  ctx.fillStyle = streak > 0 ? '#FFD700' : '#fff';
+  ctx.fillText('🔥 ' + streak, W/2 + 10, UI_H - 10);
+
+  // Lives (hearts)
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#fff';
+  const heartsStr = '❤️'.repeat(Math.max(0, lives)) + '🖤'.repeat(Math.max(0, 3 - lives));
+  ctx.fillText(heartsStr, W - 16, UI_H - 10);
+
+  ctx.restore();
+}
+
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '';
+  let lineY = y;
+  for (let i = 0; i < words.length; i++) {
+    const test = line + words[i] + ' ';
+    if (ctx.measureText(test).width > maxW && i > 0) {
+      ctx.fillText(line.trim(), x, lineY);
+      line = words[i] + ' ';
+      lineY += lineH;
+    } else {
+      line = test;
+    }
+  }
+  ctx.fillText(line.trim(), x, lineY);
+}
+
+function showGameOver() {
+  cancelAnimationFrame(animId);
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <h1>💥 Game Over!</h1>
+    <div id="final-score" style="font-family:'Fredoka One',cursive;font-size:2rem;color:#00e676;">Score: ${score}</div>
+    <p>Best streak: ${streak} 🔥<br>Keep practising your CS knowledge!</p>
+    <button id="restart-btn" onclick="restartGame()">Ride Again!</button>
+  `;
+}
+
+function restartGame() {
+  startGame();
+}
+</script>
+</body>
+</html>
